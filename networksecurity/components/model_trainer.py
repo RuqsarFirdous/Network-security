@@ -15,6 +15,8 @@ from networksecurity.utils.main_utils.utils import load_numpy_array_data,evaluat
 from networksecurity.utils.ml_utils.metric.classification_metric import get_classification_score
 
 import mlflow
+import dagshub
+dagshub.init(repo_owner='RuqsarFirdous', repo_name='Network-security', mlflow=True)
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import r2_score
@@ -36,7 +38,7 @@ class ModelTrainer:
         except Exception as e:
             raise NetworkSecurityException(e,sys)
         
-    def track_mlflow(self,best_model,classificationmetric):
+    def track_mlflow(self,best_model,classificationmetric,log_model=False):
         with mlflow.start_run():
             f1_score=classificationmetric.f1_score
             precision_score=classificationmetric.precision_score
@@ -48,7 +50,10 @@ class ModelTrainer:
             mlflow.log_metric("precision",precision_score)
             mlflow.log_metric("recall_score",recall_score)
             mlflow.sklearn.log_model(best_model,"model")
-
+            # Log model only once
+            if log_model:
+                mlflow.sklearn.save_model(best_model, "model") 
+           
                    
     def train_model(self,X_train,y_train,x_test,y_test):
         models = {
@@ -102,13 +107,13 @@ class ModelTrainer:
         classification_train_metric=get_classification_score(y_true=y_train,y_pred=y_train_pred)
         
         ## Track the experiments with mlfow
-        self.track_mlflow(best_model,classification_train_metric)
+        self.track_mlflow(best_model,classification_train_metric,log_model=True)
 
         y_test_pred=best_model.predict(x_test)
         classification_test_metric=get_classification_score(y_true=y_test,y_pred=y_test_pred)
 
         
-        self.track_mlflow(best_model,classification_test_metric)
+        self.track_mlflow(best_model,classification_test_metric,log_model=True)
 
         preprocessor = load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
             
@@ -117,7 +122,8 @@ class ModelTrainer:
 
         Network_Model=NetworkModel(preprocessor=preprocessor,model=best_model)
         save_object(self.model_trainer_config.trained_model_file_path,obj=NetworkModel)
-
+        #model pusher
+        save_object("final_model/model.pkl",best_model)
 
         ## Model Trainer Artifact
         model_trainer_artifact=ModelTrainerArtifact(trained_model_file_path=self.model_trainer_config.trained_model_file_path,
